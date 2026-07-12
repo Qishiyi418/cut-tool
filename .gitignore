@@ -1,0 +1,24 @@
+# Local agent and editor state
+.agents/
+.vscode/
+.idea/
+
+# Legacy Electron implementation and generated runtime
+assets/
+dist/
+node_modules/
+src/
+test/
+package.json
+package-lock.json
+
+# Native build outputs
+native/assets/
+native/dist/
+native/release/
+native/test-dist/
+
+# User-specific build files
+*.user
+*.suo
+*.log
