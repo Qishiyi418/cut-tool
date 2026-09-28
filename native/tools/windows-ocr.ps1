@@ -58,6 +58,9 @@ try {
       if ([Windows.Media.Ocr.OcrEngine]::IsLanguageSupported($requestedLanguage)) {
         $engine = [Windows.Media.Ocr.OcrEngine]::TryCreateFromLanguage($requestedLanguage)
       }
+      else {
+        throw "Windows OCR language is not installed: $Language"
+      }
     }
     if ($null -eq $engine) {
       $engine = [Windows.Media.Ocr.OcrEngine]::TryCreateFromUserProfileLanguages()
@@ -69,7 +72,7 @@ try {
     $result = Wait-WinRtOperation (
       $engine.RecognizeAsync($bitmap)
     ) ([Windows.Media.Ocr.OcrResult])
-    [Console]::Out.Write($result.Text)
+    [Console]::Out.Write((($result.Lines | ForEach-Object { $_.Text }) -join [Environment]::NewLine))
   }
   finally {
     if ($null -ne $bitmap) { $bitmap.Dispose() }

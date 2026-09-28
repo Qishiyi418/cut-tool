@@ -42,6 +42,14 @@ if (Test-Path -LiteralPath $target) {
   if (-not $resolvedTarget.Equals($target, [StringComparison]::OrdinalIgnoreCase)) {
     throw 'The existing install path resolves outside the intended directory.'
   }
+  # Native 2.x also needs to release its executable before an in-place update.
+  $installedExecutable = Join-Path $target 'CutTool.exe'
+  Get-CimInstance Win32_Process -Filter "Name='CutTool.exe'" -ErrorAction SilentlyContinue |
+    Where-Object { $_.ExecutablePath -and $_.ExecutablePath.Equals($installedExecutable, [StringComparison]::OrdinalIgnoreCase) } |
+    ForEach-Object {
+      Stop-Process -Id $_.ProcessId -Force -ErrorAction Stop
+      Wait-Process -Id $_.ProcessId -Timeout 10 -ErrorAction SilentlyContinue
+    }
   Remove-Item -LiteralPath $target -Recurse -Force
 }
 New-Item -ItemType Directory -Path $target -Force | Out-Null
@@ -67,8 +75,8 @@ $uninstallKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\CutTo
 New-Item -Path $uninstallKey -Force | Out-Null
 $uninstallScript = Join-Path $target 'uninstall.ps1'
 $uninstallCommand = 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "' + $uninstallScript + '"'
-New-ItemProperty -Path $uninstallKey -Name DisplayName -Value 'CutTool 2.0.0' -PropertyType String -Force | Out-Null
-New-ItemProperty -Path $uninstallKey -Name DisplayVersion -Value '2.0.0' -PropertyType String -Force | Out-Null
+New-ItemProperty -Path $uninstallKey -Name DisplayName -Value 'CutTool 2.0.2' -PropertyType String -Force | Out-Null
+New-ItemProperty -Path $uninstallKey -Name DisplayVersion -Value '2.0.2' -PropertyType String -Force | Out-Null
 New-ItemProperty -Path $uninstallKey -Name Publisher -Value 'CutTool' -PropertyType String -Force | Out-Null
 New-ItemProperty -Path $uninstallKey -Name InstallLocation -Value $target -PropertyType String -Force | Out-Null
 New-ItemProperty -Path $uninstallKey -Name DisplayIcon -Value ($executable + ',0') -PropertyType String -Force | Out-Null
@@ -79,10 +87,10 @@ New-ItemProperty -Path $uninstallKey -Name NoRepair -Value 1 -PropertyType DWord
 $estimatedSize = [int][math]::Ceiling((Get-ChildItem -LiteralPath $target -File -Recurse | Measure-Object Length -Sum).Sum / 1KB)
 New-ItemProperty -Path $uninstallKey -Name EstimatedSize -Value $estimatedSize -PropertyType DWord -Force | Out-Null
 
-if (-not $NoLaunch) { Start-Process -FilePath $executable -WorkingDirectory $target }
+if (-not $NoLaunch) { Start-Process -FilePath $executable -WorkingDirectory $target -WindowStyle Hidden }
 
 [pscustomobject]@{
-  InstalledVersion = '2.0.0'
+  InstalledVersion = '2.0.2'
   Executable = $executable
   DesktopShortcut = $desktopShortcut
   SettingsPreserved = Test-Path -LiteralPath $settingsPath

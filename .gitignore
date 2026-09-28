@@ -17,6 +17,8 @@ native/assets/
 native/dist/
 native/release/
 native/test-dist/
+native/clipboard-test-dist/
+native/dependencies/
 
 # User-specific build files
 *.user

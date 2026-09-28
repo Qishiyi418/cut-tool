@@ -76,6 +76,17 @@ New-Item -ItemType Directory -Path $toolsOutput -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $projectRoot 'tools\windows-ocr.ps1') -Destination $toolsOutput -Force
 Copy-Item -LiteralPath (Join-Path $projectRoot 'tools\uninstall.ps1') -Destination $outputRoot -Force
 
+& (Join-Path $projectRoot 'restore-ocr.ps1')
+$ocrOutput = Join-Path $toolsOutput 'ocr'
+New-Item -ItemType Directory -Path $ocrOutput,(Join-Path $ocrOutput 'x64'),(Join-Path $ocrOutput 'tessdata') -Force | Out-Null
+$ocrDependencies = Join-Path $projectRoot 'dependencies'
+Copy-Item -LiteralPath (Join-Path $ocrDependencies 'tesseract\lib\net48\Tesseract.dll') -Destination $ocrOutput -Force
+Copy-Item -Path (Join-Path $ocrDependencies 'tesseract\x64\*.dll') -Destination (Join-Path $ocrOutput 'x64') -Force
+Copy-Item -LiteralPath (Join-Path $ocrDependencies 'eng.traineddata') -Destination (Join-Path $ocrOutput 'tessdata') -Force
+Copy-Item -LiteralPath (Join-Path $projectRoot 'licenses') -Destination $outputRoot -Recurse -Force
+& $compiler @('/nologo','/target:exe','/platform:x64','/optimize+','/codepage:65001',('/out:' + (Join-Path $ocrOutput 'CutTool.Ocr.exe')),('/reference:' + (Join-Path $ocrOutput 'Tesseract.dll')),('/reference:' + (Join-Path $frameworkRoot 'System.Drawing.dll'))) (Join-Path $projectRoot 'OcrWorker\Program.cs')
+if ($LASTEXITCODE -ne 0) { throw 'English OCR helper build failed.' }
+
 $size = (Get-ChildItem -LiteralPath $outputRoot -File -Recurse | Measure-Object Length -Sum).Sum
 [pscustomobject]@{
   Executable = $output

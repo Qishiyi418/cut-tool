@@ -6,6 +6,7 @@ using System.Net;
 using System.Net.Http;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Web;
 using System.Web.Script.Serialization;
@@ -16,46 +17,81 @@ namespace CutTool.Native
 
     internal static class OcrService
     {
+        private static readonly SemaphoreSlim Gate = new SemaphoreSlim(1, 1);
+
         internal static Task<string> RecognizeAsync(string imagePath, string sourceLanguage)
         {
             return Task.Run(delegate
             {
-                string script = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "tools", "windows-ocr.ps1");
-                if (!File.Exists(script)) throw new FileNotFoundException("找不到 Windows OCR 脚本。", script);
-
-                string language = sourceLanguage == "zh-CN" ? "zh-CN" : sourceLanguage == "en" ? "en-US" : string.Empty;
-                string powershell = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.System),
-                    "WindowsPowerShell",
-                    "v1.0",
-                    "powershell.exe");
-                var start = new ProcessStartInfo
+                Gate.Wait();
+                try
                 {
-                    FileName = powershell,
-                    Arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File " + Quote(script) +
-                                " -ImagePath " + Quote(imagePath) + " -Language " + Quote(language),
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    StandardOutputEncoding = Encoding.UTF8,
-                    StandardErrorEncoding = Encoding.UTF8
-                };
+                    if (sourceLanguage == "zh-CN") return RecognizeWindows(imagePath, "zh-CN");
+                    if (sourceLanguage == "en" || sourceLanguage == "en-US") return RecognizeEnglish(imagePath);
 
-                using (Process process = Process.Start(start))
-                {
-                    string output = process.StandardOutput.ReadToEnd();
-                    string error = process.StandardError.ReadToEnd();
-                    if (!process.WaitForExit(30000))
-                    {
-                        try { process.Kill(); } catch { }
-                        throw new TimeoutException("OCR 识别超时。");
-                    }
-                    if (process.ExitCode != 0)
-                        throw new InvalidOperationException(string.IsNullOrWhiteSpace(error) ? "Windows OCR 执行失败。" : error.Trim());
-                    return output.Trim();
+                    // Windows' profile language is not language detection. On a
+                    // Chinese-only system it badly misreads small English text.
+                    string local = string.Empty;
+                    try { local = RecognizeWindows(imagePath, string.Empty); }
+                    catch { /* English OCR remains available without Windows language packs. */ }
+                    int han = Regex.Matches(local, @"[\u3400-\u9fff]").Count;
+                    int letters = Regex.Matches(local, @"[A-Za-z\u3400-\u9fff]").Count;
+                    if (han >= 2 && han >= letters * 0.2) return local;
+                    return RecognizeEnglish(imagePath);
                 }
+                finally { Gate.Release(); }
             });
+        }
+
+        private static string RecognizeEnglish(string imagePath)
+        {
+            string executable = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "tools", "ocr", "CutTool.Ocr.exe");
+            if (!File.Exists(executable)) throw new FileNotFoundException("缺少英文 OCR 组件，请重新安装完整版本。", executable);
+            return RunProcess(executable, Quote(imagePath));
+        }
+
+        private static string RecognizeWindows(string imagePath, string language)
+        {
+            string script = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "tools", "windows-ocr.ps1");
+            if (!File.Exists(script)) throw new FileNotFoundException("找不到 Windows OCR 脚本。", script);
+
+            string powershell = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.System),
+                "WindowsPowerShell",
+                "v1.0",
+                "powershell.exe");
+            return RunProcess(powershell,
+                "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File " + Quote(script) +
+                " -ImagePath " + Quote(imagePath) + (string.IsNullOrEmpty(language) ? string.Empty : " -Language " + Quote(language)));
+        }
+
+        private static string RunProcess(string executable, string arguments)
+        {
+            var start = new ProcessStartInfo
+            {
+                FileName = executable,
+                Arguments = arguments,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                StandardOutputEncoding = Encoding.UTF8,
+                StandardErrorEncoding = Encoding.UTF8
+            };
+
+            using (Process process = Process.Start(start))
+            {
+                Task<string> output = process.StandardOutput.ReadToEndAsync();
+                Task<string> error = process.StandardError.ReadToEndAsync();
+                if (!process.WaitForExit(30000))
+                {
+                    try { process.Kill(); } catch { }
+                    throw new TimeoutException("OCR 识别超时。");
+                }
+                if (process.ExitCode != 0)
+                    throw new InvalidOperationException(string.IsNullOrWhiteSpace(error.Result) ? "OCR 执行失败。" : error.Result.Trim());
+                return output.Result.Trim();
+            }
         }
 
         private static string Quote(string value)
@@ -141,13 +177,18 @@ namespace CutTool.Native
         private static async Task<TranslationResult> TranslateWithMyMemory(string text, string from, string to)
         {
             string source = from == "auto" ? "en" : from;
-            string query = text.Length > 500 ? text.Substring(0, 500) : text;
+            // Do not silently lose the rest of a paragraph at the provider's byte limit.
+            if (Encoding.UTF8.GetByteCount(text) > 500) throw new InvalidOperationException("文本超过 MyMemory 限制，尝试下一服务");
+            string query = text;
             string address = "https://api.mymemory.translated.net/get?q=" + Uri.EscapeDataString(query) +
                              "&langpair=" + Uri.EscapeDataString(source + "|" + to);
             using (HttpClient client = CreateClient(7))
             {
                 string json = await client.GetStringAsync(address);
                 var root = new JavaScriptSerializer().DeserializeObject(json) as Dictionary<string, object>;
+                object responseStatus;
+                if (root == null || !root.TryGetValue("responseStatus", out responseStatus) || Convert.ToInt32(responseStatus) != 200)
+                    throw new InvalidOperationException("服务拒绝请求或额度已用尽");
                 object dataValue;
                 var data = root != null && root.TryGetValue("responseData", out dataValue) ? dataValue as Dictionary<string, object> : null;
                 object textValue;

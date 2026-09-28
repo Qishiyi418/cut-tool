@@ -11,6 +11,8 @@ $output = Join-Path $root 'test-dist'
 if (Test-Path -LiteralPath $output) { Remove-Item -LiteralPath $output -Recurse -Force }
 New-Item -ItemType Directory -Path (Join-Path $output 'tools') -Force | Out-Null
 Copy-Item -LiteralPath (Join-Path $root 'tools\windows-ocr.ps1') -Destination (Join-Path $output 'tools')
+if (-not (Test-Path -LiteralPath (Join-Path $root 'dist\tools\ocr\CutTool.Ocr.exe'))) { throw 'Run build.ps1 before testing.' }
+Copy-Item -LiteralPath (Join-Path $root 'dist\tools\ocr') -Destination (Join-Path $output 'tools') -Recurse
 
 $references = @(
   'System.dll', 'System.Core.dll', 'System.Drawing.dll', 'System.Windows.Forms.dll',
