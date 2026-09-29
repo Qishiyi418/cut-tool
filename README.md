@@ -69,6 +69,11 @@ PNG、DIB、Bitmap 仍可读取，并验证资源管理器文件粘贴所需的 
 
 新增第三方组件和许可见 `native/licenses/THIRD-PARTY.md`。
 
+## 2.0.3 翻译连接修复
+
+优先使用通过系统代理可访问的 Google 翻译，临时失败时自动重试，再尝试 Bing 和
+MyMemory。翻译失败时，结果窗口会显示完整的服务错误及底层网络原因。
+
 ## 安装
 
 ```powershell

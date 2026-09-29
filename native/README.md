@@ -1,4 +1,4 @@
-# CutTool Native 2.0.2
+# CutTool Native 2.0.3
 
 CutTool Native is the lightweight Windows implementation. It uses Win32 and
 WinForms directly and does not start Electron, Chromium, Node.js, a GPU helper,
@@ -53,6 +53,8 @@ process boundaries; it replaces the clipboard with a generated test image.
 - Auto language selection uses a Chinese-character ratio heuristic. Explicit
   English/Chinese settings can resolve ambiguity in mixed or very short text.
 - Translation: HTTPS clients exist only for the active request.
+  Google is tried first through the system proxy with one retry, followed by
+  Bing and MyMemory when needed. The result window shows scrollable errors.
 
 Settings remain compatible with the Electron version and are stored in
 `%APPDATA%\cuttool\settings.json`.

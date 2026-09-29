@@ -12,7 +12,7 @@ namespace CutTool.Native
         private readonly TextMode mode;
         private readonly Bitmap image;
         private readonly AppSettings settings;
-        private readonly Label status;
+        private readonly TextBox status;
         private readonly Label sourceLabel;
         private readonly TextBox sourceBox;
         private readonly TextBox resultBox;
@@ -50,12 +50,18 @@ namespace CutTool.Native
             root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             Controls.Add(root);
 
-            status = new Label
+            status = new TextBox
             {
                 Text = "等待处理...",
-                AutoSize = true,
+                Multiline = true,
+                ReadOnly = true,
+                TabStop = false,
+                BorderStyle = BorderStyle.None,
+                ScrollBars = ScrollBars.Vertical,
+                Dock = DockStyle.Fill,
+                Height = 56,
+                BackColor = BackColor,
                 ForeColor = Color.FromArgb(90, 98, 106),
-                Padding = new Padding(0, 0, 0, 8)
             };
             root.Controls.Add(status);
 

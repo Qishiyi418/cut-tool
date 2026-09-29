@@ -50,9 +50,10 @@ if (Test-Path -LiteralPath $target) {
       Stop-Process -Id $_.ProcessId -Force -ErrorAction Stop
       Wait-Process -Id $_.ProcessId -Timeout 10 -ErrorAction SilentlyContinue
     }
-  Remove-Item -LiteralPath $target -Recurse -Force
 }
 New-Item -ItemType Directory -Path $target -Force | Out-Null
+# Update the installed files in place after the running executable exits.
+# This also keeps the updater from deleting user-created files in this folder.
 Copy-Item -Path (Join-Path $source '*') -Destination $target -Recurse -Force
 
 if ((Test-Path -LiteralPath $settingsBackup) -and -not (Test-Path -LiteralPath $settingsPath)) {
@@ -75,8 +76,8 @@ $uninstallKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\CutTo
 New-Item -Path $uninstallKey -Force | Out-Null
 $uninstallScript = Join-Path $target 'uninstall.ps1'
 $uninstallCommand = 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "' + $uninstallScript + '"'
-New-ItemProperty -Path $uninstallKey -Name DisplayName -Value 'CutTool 2.0.2' -PropertyType String -Force | Out-Null
-New-ItemProperty -Path $uninstallKey -Name DisplayVersion -Value '2.0.2' -PropertyType String -Force | Out-Null
+New-ItemProperty -Path $uninstallKey -Name DisplayName -Value 'CutTool 2.0.3' -PropertyType String -Force | Out-Null
+New-ItemProperty -Path $uninstallKey -Name DisplayVersion -Value '2.0.3' -PropertyType String -Force | Out-Null
 New-ItemProperty -Path $uninstallKey -Name Publisher -Value 'CutTool' -PropertyType String -Force | Out-Null
 New-ItemProperty -Path $uninstallKey -Name InstallLocation -Value $target -PropertyType String -Force | Out-Null
 New-ItemProperty -Path $uninstallKey -Name DisplayIcon -Value ($executable + ',0') -PropertyType String -Force | Out-Null
@@ -90,7 +91,7 @@ New-ItemProperty -Path $uninstallKey -Name EstimatedSize -Value $estimatedSize -
 if (-not $NoLaunch) { Start-Process -FilePath $executable -WorkingDirectory $target -WindowStyle Hidden }
 
 [pscustomobject]@{
-  InstalledVersion = '2.0.2'
+  InstalledVersion = '2.0.3'
   Executable = $executable
   DesktopShortcut = $desktopShortcut
   SettingsPreserved = Test-Path -LiteralPath $settingsPath

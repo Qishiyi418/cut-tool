@@ -111,13 +111,32 @@ namespace CutTool.Native
         internal static async Task<TranslationResult> TranslateAsync(string text, string from, string to)
         {
             var errors = new List<string>();
+            // Google's endpoint works through the user's system proxy here,
+            // while the Bing and MyMemory endpoints may reject the TLS handshake.
+            // Try the working provider first and retry transient failures with
+            // a fresh connection before falling back to other providers.
+            for (int attempt = 0; attempt < 2; attempt++)
+            {
+                Exception googleError = null;
+                try { return await TranslateWithGoogle(text, from, to); }
+                catch (Exception error) { googleError = error; }
+                if (attempt == 1) errors.Add("Google: " + GetErrorDetail(googleError));
+                else await Task.Delay(300);
+            }
             try { return await TranslateWithBing(text, from, to); }
-            catch (Exception error) { errors.Add("Bing: " + error.Message); }
+            catch (Exception error) { errors.Add("Bing: " + GetErrorDetail(error)); }
             try { return await TranslateWithMyMemory(text, from, to); }
-            catch (Exception error) { errors.Add("MyMemory: " + error.Message); }
-            try { return await TranslateWithGoogle(text, from, to); }
-            catch (Exception error) { errors.Add("Google: " + error.Message); }
-            throw new InvalidOperationException("所有翻译服务均不可用。" + string.Join("；", errors.ToArray()));
+            catch (Exception error) { errors.Add("MyMemory: " + GetErrorDetail(error)); }
+            throw new InvalidOperationException("所有翻译服务均不可用。请检查网络和代理连接。" + Environment.NewLine + string.Join(Environment.NewLine, errors.ToArray()));
+        }
+
+        private static string GetErrorDetail(Exception error)
+        {
+            // HttpClient often reports only "Error sending request" on the
+            // surface; the inner exception identifies TLS or proxy failures.
+            Exception detail = error;
+            while (detail.InnerException != null) detail = detail.InnerException;
+            return detail.Message;
         }
 
         private static HttpClient CreateClient(int timeoutSeconds)
@@ -202,7 +221,7 @@ namespace CutTool.Native
             string address = "https://translate.googleapis.com/translate_a/single?client=gtx&sl=" +
                              Uri.EscapeDataString(from) + "&tl=" + Uri.EscapeDataString(to) +
                              "&dt=t&q=" + Uri.EscapeDataString(text);
-            using (HttpClient client = CreateClient(5))
+            using (HttpClient client = CreateClient(12))
             {
                 string json = await client.GetStringAsync(address);
                 object[] root = new JavaScriptSerializer().DeserializeObject(json) as object[];
