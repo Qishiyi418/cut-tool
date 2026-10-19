@@ -65,8 +65,8 @@ namespace CutTool.Native
             };
             root.Controls.Add(status);
 
-            sourceLabel = new Label { Text = "原文", AutoSize = true, Visible = mode == TextMode.Translate };
-            sourceBox = CreateTextBox(true);
+            sourceLabel = new Label { Text = "原文（可修改后点“重试”重新翻译）", AutoSize = true, Visible = mode == TextMode.Translate };
+            sourceBox = CreateTextBox(false);
             sourceBox.Visible = mode == TextMode.Translate;
             if (mode == TextMode.Translate)
             {
@@ -121,18 +121,26 @@ namespace CutTool.Native
             processing = true;
             retryButton.Enabled = false;
             resultBox.ReadOnly = true;
+            sourceBox.ReadOnly = true;
             resultBox.Text = string.Empty;
-            sourceBox.Text = string.Empty;
             status.ForeColor = Color.FromArgb(90, 98, 106);
-            status.Text = "正在识别文字...";
 
-            string temporary = Path.Combine(Path.GetTempPath(), "cuttool-ocr-" + Guid.NewGuid().ToString("N") + ".png");
+            // A retry after a translation failure (or an edit of the recognized
+            // text) only needs the translation step, not another OCR pass.
+            string source = mode == TextMode.Translate ? sourceBox.Text.Trim() : string.Empty;
+            string temporary = null;
             try
             {
-                image.Save(temporary, ImageFormat.Png);
-                string source = await OcrService.RecognizeAsync(temporary, settings.TranslateFrom);
-                if (IsDisposed) return;
-                if (string.IsNullOrWhiteSpace(source)) throw new InvalidOperationException("未识别到文字，请确认截图区域包含清晰文本。");
+                if (source.Length == 0)
+                {
+                    status.Text = "正在识别文字...";
+                    temporary = Path.Combine(Path.GetTempPath(), "cuttool-ocr-" + Guid.NewGuid().ToString("N") + ".png");
+                    image.Save(temporary, ImageFormat.Png);
+                    source = await OcrService.RecognizeAsync(temporary, settings.TranslateFrom);
+                    if (IsDisposed) return;
+                    if (string.IsNullOrWhiteSpace(source)) throw new InvalidOperationException("未识别到文字，请确认截图区域包含清晰文本。");
+                    source = TextLayout.ForDisplay(mode == TextMode.Translate ? TextLayout.JoinWrappedLines(source) : source);
+                }
 
                 if (mode == TextMode.Ocr)
                 {
@@ -150,7 +158,7 @@ namespace CutTool.Native
                     status.Text = "正在翻译...";
                     TranslationResult translated = await TranslationService.TranslateAsync(source, settings.TranslateFrom, settings.TranslateTo);
                     if (IsDisposed) return;
-                    resultBox.Text = translated.Text;
+                    resultBox.Text = TextLayout.ForDisplay(translated.Text);
                     status.Text = "翻译完成 · " + translated.Provider;
                 }
             }
@@ -164,12 +172,13 @@ namespace CutTool.Native
             }
             finally
             {
-                try { if (File.Exists(temporary)) File.Delete(temporary); } catch { }
+                try { if (temporary != null && File.Exists(temporary)) File.Delete(temporary); } catch { }
                 if (!IsDisposed)
                 {
                     processing = false;
                     retryButton.Enabled = true;
                     resultBox.ReadOnly = false;
+                    sourceBox.ReadOnly = false;
                 }
             }
         }

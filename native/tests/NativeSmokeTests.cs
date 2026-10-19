@@ -13,6 +13,9 @@ namespace CutTool.Native
         private static void Main(string[] args)
         {
             TestHotKeyParsing();
+            TestTranslationTls();
+            TestTextSplitting();
+            TestTextLayout();
             TestWindowsOcr();
             TestSmallEnglishOcr();
             TestChineseOcr();
@@ -36,6 +39,40 @@ namespace CutTool.Native
             Check(key == (uint)System.Windows.Forms.Keys.A, "hotkey key matches");
             Check(!HotKeyParser.TryParse("A", out modifiers, out key), "unmodified letter is rejected");
             Check(HotKeyParser.TryParse("F12", out modifiers, out key), "standalone function key parses");
+        }
+
+        private static void TestTranslationTls()
+        {
+            TranslationService.SplitText("x", 10);
+            Check((System.Net.ServicePointManager.SecurityProtocol & System.Net.SecurityProtocolType.Tls12) != 0,
+                "translation enables TLS 1.2 for Bing and MyMemory");
+        }
+
+        private static void TestTextSplitting()
+        {
+            string text = "First line of text.\nSecond sentence here. Third one follows!\n\n截图工具支持中文识别和英文翻译。" +
+                          new string('a', 30) + " tail";
+            foreach (int limit in new[] { 8, 20, 48, 4000 })
+            {
+                var pieces = TranslationService.SplitText(text, limit);
+                Check(string.Concat(pieces.ToArray()) == text, "split at " + limit + " bytes keeps all text");
+                Check(pieces.TrueForAll(delegate(string piece) { return System.Text.Encoding.UTF8.GetByteCount(piece) <= limit; }),
+                    "split at " + limit + " bytes respects the limit");
+            }
+            var lines = TranslationService.SplitText("alpha beta.\ngamma delta", 16);
+            Check(lines.Count == 2 && lines[0] == "alpha beta.\n", "split prefers line breaks");
+        }
+
+        private static void TestTextLayout()
+        {
+            Check(TextLayout.ForDisplay("a\nb\r\nc") == "a\r\nb\r\nc", "display text uses CRLF");
+            Check(TextLayout.JoinWrappedLines("The application stores captured images in the\nselected folder after each capture.") ==
+                  "The application stores captured images in the selected folder after each capture.", "wrapped English line is joined");
+            Check(TextLayout.JoinWrappedLines("这个截图工具可以识别屏幕上的中文和英\n文内容并翻译。") ==
+                  "这个截图工具可以识别屏幕上的中文和英文内容并翻译。", "wrapped Chinese line is joined");
+            string sentences = "The quick brown fox jumps over the lazy dog.\nPlease select the text and press Ctrl+C to copy.";
+            Check(TextLayout.JoinWrappedLines(sentences) == sentences, "complete sentences stay on their own lines");
+            Check(TextLayout.JoinWrappedLines("设置\n常规\nFile\nedit") == "设置\n常规\nFile\nedit", "short labels stay separate");
         }
 
         private static void TestWindowsOcr()
@@ -146,6 +183,14 @@ namespace CutTool.Native
                 TranslationResult result = TranslationService.TranslateAsync("memory", "en", "zh-CN").Result;
                 Check(result != null && !string.IsNullOrWhiteSpace(result.Text), "translation provider returns text");
                 Console.WriteLine("Translation provider: " + result.Provider + ", result: " + result.Text);
+                foreach (string line in TranslationService.ProbeAsync("Screenshot translation", "auto", "zh-CN").Result)
+                    Console.WriteLine("  " + line);
+                result = TranslationService.TranslateAsync("截图工具支持中文识别", "zh-CN", "en").Result;
+                Check(!string.IsNullOrWhiteSpace(result.Text), "Chinese to English translation returns text");
+                var builder = new System.Text.StringBuilder();
+                while (builder.Length < 4000) builder.Append("The screenshot tool translates long paragraphs in several pieces. ");
+                result = TranslationService.TranslateAsync(builder.ToString(), "en", "zh-CN").Result;
+                Check(result.Text.Length > 500, "long text translates in pieces (" + result.Provider + ", " + result.Text.Length + " chars)");
             }
             catch (Exception error)
             {

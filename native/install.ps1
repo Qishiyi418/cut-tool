@@ -76,8 +76,8 @@ $uninstallKey = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\CutTo
 New-Item -Path $uninstallKey -Force | Out-Null
 $uninstallScript = Join-Path $target 'uninstall.ps1'
 $uninstallCommand = 'powershell.exe -NoProfile -ExecutionPolicy Bypass -File "' + $uninstallScript + '"'
-New-ItemProperty -Path $uninstallKey -Name DisplayName -Value 'CutTool 2.0.3' -PropertyType String -Force | Out-Null
-New-ItemProperty -Path $uninstallKey -Name DisplayVersion -Value '2.0.3' -PropertyType String -Force | Out-Null
+New-ItemProperty -Path $uninstallKey -Name DisplayName -Value 'CutTool 2.0.4' -PropertyType String -Force | Out-Null
+New-ItemProperty -Path $uninstallKey -Name DisplayVersion -Value '2.0.4' -PropertyType String -Force | Out-Null
 New-ItemProperty -Path $uninstallKey -Name Publisher -Value 'CutTool' -PropertyType String -Force | Out-Null
 New-ItemProperty -Path $uninstallKey -Name InstallLocation -Value $target -PropertyType String -Force | Out-Null
 New-ItemProperty -Path $uninstallKey -Name DisplayIcon -Value ($executable + ',0') -PropertyType String -Force | Out-Null
@@ -91,7 +91,7 @@ New-ItemProperty -Path $uninstallKey -Name EstimatedSize -Value $estimatedSize -
 if (-not $NoLaunch) { Start-Process -FilePath $executable -WorkingDirectory $target -WindowStyle Hidden }
 
 [pscustomobject]@{
-  InstalledVersion = '2.0.3'
+  InstalledVersion = '2.0.4'
   Executable = $executable
   DesktopShortcut = $desktopShortcut
   SettingsPreserved = Test-Path -LiteralPath $settingsPath
